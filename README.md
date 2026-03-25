@@ -1,6 +1,6 @@
 # test-game-0
 
-Game project by [@mknepprath](https://github.com/mknepprath) and [@bishop-knepprath](https://github.com/bishop-knepprath).
+Game project by [@mknepprath](https://github.com/mknepprath) and [@bknepprath](https://github.com/bknepprath).
 
 ## Ideas
 
