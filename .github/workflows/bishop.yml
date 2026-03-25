@@ -10,7 +10,6 @@ on:
   pull_request_review_comment:
     types: [created]
   schedule:
-    # Check in once a day at noon ET (4pm UTC)
     - cron: "0 16 * * *"
 
 jobs:
@@ -26,10 +25,8 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           BISHOP_TOKEN: ${{ secrets.BISHOP_TOKEN }}
         with:
+          github-token: ${{ secrets.BISHOP_TOKEN }}
           script: |
-            const { Octokit } = require("@octokit/rest");
-            const bishopOctokit = new Octokit({ auth: process.env.BISHOP_TOKEN });
-
             const issue = context.payload.issue;
 
             const { data: comments } = await github.rest.issues.listComments({
@@ -67,7 +64,7 @@ jobs:
             const data = await response.json();
             const reply = data.content[0].text;
 
-            await bishopOctokit.rest.issues.createComment({
+            await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: issue.number,
@@ -89,22 +86,17 @@ jobs:
         uses: actions/github-script@v7
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          BISHOP_TOKEN: ${{ secrets.BISHOP_TOKEN }}
         with:
+          github-token: ${{ secrets.BISHOP_TOKEN }}
           script: |
-            const { Octokit } = require("@octokit/rest");
-            const bishopOctokit = new Octokit({ auth: process.env.BISHOP_TOKEN });
             const { execSync } = require("child_process");
-
             const pr = context.payload.pull_request;
 
-            // Get the diff
             const diff = execSync(
               `git diff ${pr.base.sha}...${pr.head.sha} -- . ':!package-lock.json' ':!*.lock'`,
               { encoding: "utf-8", maxBuffer: 50 * 1024 }
             ).slice(0, 10000);
 
-            // Get existing review comments to avoid duplicating
             const { data: reviews } = await github.rest.pulls.listReviews({
               owner: context.repo.owner,
               repo: context.repo.repo,
@@ -137,7 +129,7 @@ jobs:
             const data = await response.json();
             const review = data.content[0].text;
 
-            await bishopOctokit.rest.issues.createComment({
+            await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: pr.number,
@@ -154,23 +146,18 @@ jobs:
         uses: actions/github-script@v7
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          BISHOP_TOKEN: ${{ secrets.BISHOP_TOKEN }}
         with:
+          github-token: ${{ secrets.BISHOP_TOKEN }}
           script: |
-            const { Octokit } = require("@octokit/rest");
-            const bishopOctokit = new Octokit({ auth: process.env.BISHOP_TOKEN });
-
             const pr = context.payload.pull_request;
             const comment = context.payload.comment;
 
-            // Get all review comments for thread context
             const { data: comments } = await github.rest.pulls.listReviewComments({
               owner: context.repo.owner,
               repo: context.repo.repo,
               pull_number: pr.number,
             });
 
-            // Find the thread this comment belongs to
             const threadId = comment.in_reply_to_id || comment.id;
             const thread = comments
               .filter(c => c.id === threadId || c.in_reply_to_id === threadId)
@@ -201,7 +188,7 @@ jobs:
             const data = await response.json();
             const reply = data.content[0].text;
 
-            await bishopOctokit.rest.pulls.createReplyForReviewComment({
+            await github.rest.pulls.createReplyForReviewComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
               pull_number: pr.number,
@@ -220,21 +207,17 @@ jobs:
         uses: actions/github-script@v7
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          BISHOP_TOKEN: ${{ secrets.BISHOP_TOKEN }}
         with:
+          github-token: ${{ secrets.BISHOP_TOKEN }}
           script: |
-            const { Octokit } = require("@octokit/rest");
-            const bishopOctokit = new Octokit({ auth: process.env.BISHOP_TOKEN });
             const { execSync } = require("child_process");
 
-            // Get open issues
             const { data: issues } = await github.rest.issues.listForRepo({
               owner: context.repo.owner,
               repo: context.repo.repo,
               state: "open",
             });
 
-            // Get recent commits
             let recentCommits = "";
             try {
               recentCommits = execSync(
@@ -243,7 +226,6 @@ jobs:
               );
             } catch { recentCommits = "(no recent commits)"; }
 
-            // Get file listing for project state
             let files = "";
             try {
               files = execSync('find . -not -path "./.git/*" -not -path "./node_modules/*" -type f', {
@@ -279,21 +261,20 @@ jobs:
             const data = await response.json();
             let reply = data.content[0].text;
 
-            // Extract JSON from response
             const jsonMatch = reply.match(/\{[\s\S]*\}/);
             if (!jsonMatch) return;
 
             const action = JSON.parse(jsonMatch[0]);
 
             if (action.action === "comment" && action.issue_number) {
-              await bishopOctokit.rest.issues.createComment({
+              await github.rest.issues.createComment({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 issue_number: action.issue_number,
                 body: action.body,
               });
             } else if (action.action === "new_issue") {
-              await bishopOctokit.rest.issues.create({
+              await github.rest.issues.create({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 title: action.title,
