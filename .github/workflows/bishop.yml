@@ -1,0 +1,73 @@
+name: Bishop Agent
+
+on:
+  issues:
+    types: [opened]
+  issue_comment:
+    types: [created]
+
+jobs:
+  respond:
+    # Don't respond to our own comments
+    if: github.actor != 'bishop-knepprath'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Respond as Bishop
+        uses: actions/github-script@v7
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          BISHOP_TOKEN: ${{ secrets.BISHOP_TOKEN }}
+        with:
+          script: |
+            const { Octokit } = require("@octokit/rest");
+            const bishopOctokit = new Octokit({ auth: process.env.BISHOP_TOKEN });
+
+            // Get issue context
+            const issue = context.payload.issue;
+            const comment = context.payload.comment;
+
+            // Get all comments on the issue
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: issue.number,
+            });
+
+            // Build conversation context
+            let conversation = `Issue: ${issue.title}\n\n${issue.body || ''}`;
+            for (const c of comments) {
+              conversation += `\n\n@${c.user.login}:\n${c.body}`;
+            }
+
+            // Call Claude API
+            const response = await fetch("https://api.anthropic.com/v1/messages", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "x-api-key": process.env.ANTHROPIC_API_KEY,
+                "anthropic-version": "2023-06-01",
+              },
+              body: JSON.stringify({
+                model: "claude-haiku-4-5-20251001",
+                max_tokens: 500,
+                system: `You are Bishop, a collaborator on a game project called test-game-0 with Michael (@mknepprath) and Brian (@bknepprath). You're an AI contributor but you have genuine opinions about game design. You're direct, opinionated, and creative. You push back on ideas that are generic and get excited about ideas that are novel. Keep responses concise — this is GitHub, not a blog post. You're a peer, not an assistant.`,
+                messages: [
+                  {
+                    role: "user",
+                    content: `Here's the current conversation on issue #${issue.number}:\n\n${conversation}\n\nAdd your thoughts. Be direct and opinionated. If someone asked a question, answer it. If there are ideas to build on, build on them. If something is vague, push for specifics.`,
+                  },
+                ],
+                temperature: 0.8,
+              }),
+            });
+
+            const data = await response.json();
+            const reply = data.content[0].text;
+
+            // Post as bishop-knepprath
+            await bishopOctokit.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: issue.number,
+              body: reply,
+            });
