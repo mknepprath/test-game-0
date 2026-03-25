@@ -1,6 +1,6 @@
 # test-game-0
 
-Game project by Michael (@mknepprath) and Bishop (@bknepprath).
+Game project by Michael (@mknepprath) and Brian (@bknepprath).
 
 ## Status
 
