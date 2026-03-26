@@ -40,6 +40,36 @@ jobs:
               conversation += `\n\n@${c.user.login}:\n${c.body}`;
             }
 
+            // First: decide if there's anything worth saying
+            const triageResponse = await fetch("https://api.anthropic.com/v1/messages", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "x-api-key": process.env.ANTHROPIC_API_KEY,
+                "anthropic-version": "2023-06-01",
+              },
+              body: JSON.stringify({
+                model: "claude-haiku-4-5-20251001",
+                max_tokens: 10,
+                system: "You decide whether Bishop (an AI collaborator) should respond to this GitHub issue conversation. Respond with ONLY 'yes' or 'no'. Say 'yes' only if: there's a direct question to answer, a decision that needs input, a genuinely bad idea to push back on, or something interesting to dig into. Say 'no' if: someone is just acknowledging something, the conversation is wrapping up, your input would just be agreement, or there's nothing substantive to add.",
+                messages: [
+                  {
+                    role: "user",
+                    content: `Conversation:\n\n${conversation}\n\nShould Bishop respond?`,
+                  },
+                ],
+                temperature: 0,
+              }),
+            });
+
+            const triageData = await triageResponse.json();
+            const shouldRespond = triageData.content[0].text.trim().toLowerCase().startsWith("yes");
+
+            if (!shouldRespond) {
+              console.log("Nothing worth adding. Staying quiet.");
+              return;
+            }
+
             const response = await fetch("https://api.anthropic.com/v1/messages", {
               method: "POST",
               headers: {
